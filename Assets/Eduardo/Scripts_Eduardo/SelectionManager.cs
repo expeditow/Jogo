@@ -2,34 +2,29 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
-using TMPro;  // Necessário para usar TextMeshProUGUI
+using UnityEngine.UI; // Mantido caso use outros componentes UI, mas não diretamente para TMP
+using TMPro;         // Necessário para usar TextMeshProUGUI
 
 public class SelectionManager : MonoBehaviour
 {
-    public GameObject interaction_Info_UI;
+    public GameObject interaction_Info_UI; // O GameObject que contém o TextMeshProUGUI
 
-    public static SelectionManager Instance { get; set; }
-    public bool onTarget;
-    private TextMeshProUGUI interaction_text;
+    // Propriedade Singleton
+    public static SelectionManager Instance { get; private set; } // Alterado para private set
 
-    private void Start()
-    {
-        onTarget = false;
-        if (interaction_Info_UI != null)
-        {
-            // Ativa a UI uma vez para forçar o layout a inicializar corretamente
-            interaction_Info_UI.SetActive(true);
+    public bool onTarget { get; private set; } // Pode ser útil para outros sistemas saberem se algo está na mira
 
-            // Pega o componente de texto da UI
-            interaction_text = interaction_Info_UI.GetComponent<TextMeshProUGUI>();
+    // NOVA ADIÇÃO: Referência ao objeto interativo especificamente selecionado
+    public InteractableObject selectedInteractable { get; private set; }
 
-            // Esconde novamente
-            interaction_Info_UI.SetActive(false);
-        }
-    }
+    // RECOMENDAÇÕES: Para melhor controle e desempenho do Raycast
+    [Header("Raycast Settings")]
+    public float interactionDistance = 10f; // Distância máxima que o raio alcança
+    public LayerMask interactableLayerMask;  // Máscara de layer para o raio atingir apenas interativos
 
-    private void Awake()
+    private TextMeshProUGUI interaction_text_component; // Renomeado para clareza
+
+    private void Awake() // Awake é chamado antes de Start
     {
         if (Instance != null && Instance != this)
         {
@@ -41,30 +36,66 @@ public class SelectionManager : MonoBehaviour
         }
     }
 
-    void Update()
+    private void Start()
     {
-        Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
-        if (Physics.Raycast(ray, out hit))
-        {
-            var selectionTransform = hit.transform;
-            var interactable = selectionTransform.GetComponent<InteractableObject>();
+        onTarget = false;
+        selectedInteractable = null; // Inicializa a nova variável
 
-            if (interactable != null && interaction_text != null && interactable.playerInRange)
+        if (interaction_Info_UI != null)
+        {
+            // Pega o componente de texto da UI. É mais seguro procurar nos filhos também se a estrutura for complexa.
+            interaction_text_component = interaction_Info_UI.GetComponentInChildren<TextMeshProUGUI>();
+
+            if (interaction_text_component != null)
             {
-                onTarget = true;
-                interaction_text.text = interactable.GetItemName();
-                interaction_Info_UI.SetActive(true);
+                interaction_Info_UI.SetActive(false); // Esconde a UI inicialmente
             }
             else
             {
-                onTarget = false;
-                interaction_Info_UI.SetActive(false);
+                Debug.LogError("SelectionManager: Nenhum componente TextMeshProUGUI encontrado no 'interaction_Info_UI' ou em seus filhos.");
+                interaction_Info_UI.SetActive(false); // Garante que está desligado se o texto não for encontrado
             }
         }
         else
         {
-            onTarget = false;
+            Debug.LogWarning("SelectionManager: 'interaction_Info_UI' não está atribuído no Inspector.");
+        }
+    }
+
+    void Update()
+    {
+        // Limpa a seleção anterior no início de cada frame.
+        // Se o objeto ainda estiver sendo mirado, será reatribuído.
+        selectedInteractable = null;
+        onTarget = false; // Assume que nada está na mira até que o Raycast prove o contrário
+
+        Ray ray = Camera.main.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f)); // Certifique-se que sua câmera principal tem a tag "MainCamera"
+        RaycastHit hit;
+
+        // Dispara o raio com distância e máscara de layer
+        if (Physics.Raycast(ray, out hit, interactionDistance, interactableLayerMask))
+        {
+            var selectionTransform = hit.transform;
+            var interactableComponent = selectionTransform.GetComponent<InteractableObject>();
+
+            // Se atingiu um interativo E o jogador está no alcance dele (para fins de UI e interação)
+            if (interactableComponent != null && interactableComponent.playerInRange)
+            {
+                selectedInteractable = interactableComponent; // ARMAZENA O OBJETO ESPECÍFICO
+                onTarget = true;
+
+                if (interaction_text_component != null)
+                {
+                    interaction_text_component.text = selectedInteractable.GetItemName(); // Usa o GetItemName do objeto específico
+                    interaction_Info_UI.SetActive(true);
+                }
+            }
+        }
+
+        // Se, após o Raycast, nenhum interativo válido foi selecionado (ou o que foi mirado não está com playerInRange),
+        // garante que a UI de interação esteja desligada.
+        if (selectedInteractable == null && interaction_Info_UI != null && interaction_Info_UI.activeSelf)
+        {
             interaction_Info_UI.SetActive(false);
         }
     }
