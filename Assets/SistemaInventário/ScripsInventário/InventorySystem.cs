@@ -5,20 +5,20 @@ using UnityEngine;
 
 public class InventorySystem : MonoBehaviour
 {
-
-    public static InventorySystem Instance { get; set; }
+    public static InventorySystem Instance { get; set; } 
 
     public GameObject inventoryScreenUI;
     public List<GameObject> slotList = new List<GameObject>();
+    public List<string> itemList = new List<string>(); 
 
-    public List<string> itemList = new List<string>();
+    [Header("Configurações de Equipamento")]
+    public Transform playerHand; 
+    public GameObject currentlyEquippedItem = null; 
 
     private GameObject itemToAdd;
+    private GameObject whatSlotToEquip; 
 
-    private GameObject whatSlotToEquip;
-
-    public bool isOpen;
-    //public bool isFull;
+    public bool isOpen; 
 
     private void Awake()
     {
@@ -32,58 +32,86 @@ public class InventorySystem : MonoBehaviour
         }
     }
 
-
     void Start()
     {
         isOpen = false;
-
-        PopulateSlotList();
+        if (inventoryScreenUI != null) 
+        {
+            inventoryScreenUI.SetActive(false); 
+            PopulateSlotList();
+        }
+        else
+        {
+            Debug.LogError("InventorySystem: inventoryScreenUI não está atribuído no Inspector!");
+        }
     }
+
     private void PopulateSlotList()
     {
+        if (inventoryScreenUI == null) return; 
+
         foreach (Transform child in inventoryScreenUI.transform)
         {
             if (child.CompareTag("Slot"))
             {
                 slotList.Add(child.gameObject);
-
             }
         }
     }
 
     void Update()
     {
-
-        if (Input.GetKeyDown(KeyCode.I) && !isOpen)
+        if (Input.GetKeyDown(KeyCode.I)) 
         {
-
-            Debug.Log("i is pressed");
-            inventoryScreenUI.SetActive(true);
-            Cursor.lockState = CursorLockMode.None;
-            isOpen = true;
-
-        }
-        else if (Input.GetKeyDown(KeyCode.I) && isOpen)
-        {
-            inventoryScreenUI.SetActive(false);
-            Cursor.lockState = CursorLockMode.Locked;
-            isOpen = false;
+            isOpen = !isOpen; 
+            inventoryScreenUI.SetActive(isOpen);
+            Cursor.lockState = isOpen ? CursorLockMode.None : CursorLockMode.Locked;
+            if (isOpen) Debug.Log("Inventário aberto"); else Debug.Log("Inventário fechado");
         }
     }
 
-
-
-    public void AddToInventory(string ItemName)
+    public void AddToInventory(string itemName) 
     {
-     
-    
-        whatSlotToEquip = FindNextEmptySlot();
-        itemToAdd = Instantiate(Resources.Load<GameObject>(ItemName), whatSlotToEquip.transform.position, whatSlotToEquip.transform.rotation);
-        itemToAdd.transform.SetParent(whatSlotToEquip.transform);
+        if (CheckIfFull())
+        {
+            Debug.LogWarning("Inventário cheio. Não foi possível pegar " + itemName);
+            return;
+        }
 
-        itemList.Add(ItemName); 
-       
+        whatSlotToEquip = FindNextEmptySlot();
+
+        if (whatSlotToEquip == null) 
+        {
+            Debug.LogError("Não foi encontrado slot vazio para adicionar " + itemName);
+            return;
+        }
+
+        GameObject iconPrefab = Resources.Load<GameObject>(itemName);
+
+        if (iconPrefab == null)
+        {
+            Debug.LogError($"Prefab do ícone do item '{itemName}' não encontrado na pasta Resources.");
+            return;
+        }
+
+        itemToAdd = Instantiate(iconPrefab, whatSlotToEquip.transform.position, Quaternion.identity);
+        itemToAdd.transform.SetParent(whatSlotToEquip.transform, false); 
+        itemToAdd.transform.localPosition = Vector3.zero;
+        itemToAdd.transform.localScale = Vector3.one; 
+
+
+        SlotItemClickHandler clickHandler = itemToAdd.GetComponent<SlotItemClickHandler>();
+        if (clickHandler == null)
+        {
+            clickHandler = itemToAdd.AddComponent<SlotItemClickHandler>();
+            Debug.LogWarning($"SlotItemClickHandler adicionado dinamicamente a {itemName}. É melhor adicioná-lo ao prefab do ícone.");
+        }
+        clickHandler.Initialize(itemName);
+
+        itemList.Add(itemName);
+        Debug.Log($"Pegou: {itemName} e adicionou ao inventário.");
     }
+
     public bool CheckIfFull()
     {
         int counter = 0;
@@ -91,20 +119,12 @@ public class InventorySystem : MonoBehaviour
         {
             if (slot.transform.childCount > 0)
             {
-                counter += 1;
-
+                counter++;
             }
         }
-        if (counter == 21)
-            {
-                return true;
-
-            }
-        else
-            {
-                return false;
-            }
+        return counter >= slotList.Count;
     }
+
     private GameObject FindNextEmptySlot()
     {
         foreach (GameObject slot in slotList)
@@ -114,6 +134,51 @@ public class InventorySystem : MonoBehaviour
                 return slot;
             }
         }
-        return new GameObject();
+        Debug.LogWarning("Nenhum slot vazio encontrado.");
+        return null; 
+    }
+    public void HandleItemEquipRequest(string itemNameFromSlot)
+    {
+        Debug.Log($"InventorySystem recebeu pedido para equipar: {itemNameFromSlot}");
+
+        if (playerHand == null)
+        {
+            Debug.LogError("Player Hand transform não está atribuído no InventorySystem! Não é possível equipar.");
+            return;
+        }
+
+        if (itemNameFromSlot == "Pedra")
+        {
+            string equippablePrefabName = "pedraMao"; 
+
+            // 1. Desequipar item atual (se houver)
+            if (currentlyEquippedItem != null)
+            {
+                Destroy(currentlyEquippedItem);
+                currentlyEquippedItem = null;
+                Debug.Log("Item anterior desequipado.");
+            }
+
+            GameObject prefabToEquip = Resources.Load<GameObject>(equippablePrefabName);
+
+            if (prefabToEquip != null)
+            {
+                currentlyEquippedItem = Instantiate(prefabToEquip, playerHand.position, playerHand.rotation);
+                currentlyEquippedItem.transform.SetParent(playerHand);
+                currentlyEquippedItem.transform.localPosition = Vector3.zero;
+                currentlyEquippedItem.transform.localRotation = Quaternion.identity;
+                currentlyEquippedItem.transform.localScale = Vector3.one; 
+
+                Debug.Log($"'{equippablePrefabName}' equipado na mão do jogador.");
+            }
+            else
+            {
+                Debug.LogError($"Prefab equipável '{equippablePrefabName}' não encontrado na pasta Resources.");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"Nenhuma ação de equipamento definida para: {itemNameFromSlot}");
+        }
     }
 }
