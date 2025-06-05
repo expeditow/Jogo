@@ -49,7 +49,7 @@ public class CicloDiaNoite : MonoBehaviour
         OnNovoDia?.Invoke(numeroDoDia);
         isReady = true;
 
-        AtualizarSkybox(); // Define o skybox inicial corretamente
+        AtualizarSkybox(); // Define o skybox inicial
     }
 
     void Update()
@@ -79,21 +79,18 @@ public class CicloDiaNoite : MonoBehaviour
 
     private void AtualizarSkybox()
     {
-        if (climaSystem == null) { return; } // Não pode prosseguir sem ClimaSystem
-        Material skyboxFinalParaAplicar = RenderSettings.skybox; // Começa com o atual, pode ser alterado
+        if (climaSystem == null) { return; } 
+        Material skyboxFinalParaAplicar = RenderSettings.skybox; 
         bool skyboxDeveMudar = false;
 
         if (climaSystem.IsRaining())
         {
-            // `atualHora` é a hora inteira do dia (0-23)
             bool ehChuvaNoturna = (atualHora >= 20 || atualHora < 5);
             if (ehChuvaNoturna)
             {
-                // CHUVA NOTURNA: Mantém o skybox normal da hora (definido pelos timeMappings).
-                // A lógica para selecionar o skybox da hora (abaixo) será executada.
             }
 
-            else // CHUVA DIURNA (entre 5h e 19h59)
+            else 
             {
                 if (climaSystem.rainSkyBox != null)
                 {
@@ -102,20 +99,17 @@ public class CicloDiaNoite : MonoBehaviour
                         skyboxFinalParaAplicar = climaSystem.rainSkyBox;
                         skyboxDeveMudar = true;
                     }
-                    // Se o skybox de chuva diurna foi definido (ou já era o correto),
-                    // não há mais nada a fazer nesta função para este frame.
 
                     if (skyboxDeveMudar)
                     {
                         RenderSettings.skybox = skyboxFinalParaAplicar;
                         blendedValue = 0f; // Reseta transição ao mudar para o skybox de chuva
                     }
-                    return; // Importante: Retorna para não aplicar a lógica de skybox por hora.
+                    return; 
                 }
             }
         }
         // Se não estiver chovendo de dia (pode estar ensolarado, ou pode ser chuva noturna):
-        // Procurar o skybox correspondente à hora atual nos mapeamentos.
         Material skyboxMapeadoParaHora = null;
 
         if (timeMappings != null)
@@ -139,7 +133,7 @@ public class CicloDiaNoite : MonoBehaviour
             }
         }
 
-        else if (!climaSystem.IsRaining()) // Se NENHUM skybox mapeado para a hora E NÃO está chovendo
+        else if (!climaSystem.IsRaining()) 
         {
             // Fallback para o sunnySkyBox (céu limpo padrão)
             if (climaSystem.sunnySkyBox != null && RenderSettings.skybox != climaSystem.sunnySkyBox)
@@ -149,28 +143,18 @@ public class CicloDiaNoite : MonoBehaviour
             }
         }
         // Se for chuva noturna e não houver mapeamento para a hora atual, o skybox não será alterado
-        // pela lógica de mapeamento, mantendo o último skybox noturno válido ou o que já estava.
-        // Aplicar a mudança de skybox se necessário
         if (skyboxDeveMudar && skyboxFinalParaAplicar != null)
         {
             RenderSettings.skybox = skyboxFinalParaAplicar;
             blendedValue = 0f; // Reseta o fator de transição quando o material base do skybox muda.
         }
-        // Lidar com a transição do shader "Custom/SkyboxTransition"
-        // Esta lógica se aplica ao skybox que está ATUALMENTE em RenderSettings.skybox.
 
         if (RenderSettings.skybox != null && RenderSettings.skybox.shader != null && RenderSettings.skybox.shader.name == "Custom/SkyboxTransition")
         {
-            // Se blendedValue foi resetado para 0 neste frame (porque o skybox mudou),
-            // a transição começará do início.
-            // Se o skybox não mudou e já era este de transição, blendedValue continua de onde parou.
-
-            blendedValue += Time.deltaTime; // Para uma transição mais controlada: Time.deltaTime / duracaoDaTransicaoEmSegundos
+            blendedValue += Time.deltaTime;
             blendedValue = Mathf.Clamp01(blendedValue);
             RenderSettings.skybox.SetFloat("_TransitionFactor", blendedValue);
         }
-        // Se o skybox atual não usa o shader de transição, blendedValue (se resetado para 0) não terá efeito
-        // ou não será usado pelo shader.
     }
     // Método para RainManager checar se pode pegar o dia (opcional)
 
@@ -184,12 +168,11 @@ public class CicloDiaNoite : MonoBehaviour
         get { return numeroDoDia; }
     }
 }
-//A classe SkyBoxTimeMapping permanece a mesma:
 [System.Serializable]
 
 public class SkyBoxTimeMapping
 {
     public string faseDoDia;
-    public float hora; // Deve ser inteiro (0-23) para corresponder a `atualHora`
+    public float hora; 
     public Material skyboxMaterial;
 }

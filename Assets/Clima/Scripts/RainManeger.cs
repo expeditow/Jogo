@@ -1,13 +1,11 @@
 using UnityEngine;
-using System; // Não necessário System aqui, mas ok
+using System; 
 
 public class RainManager : MonoBehaviour
 {
     [Header("Rain Effects")]
     public ParticleSystem rainParticleSystem;
-    public GameObject rainEffectParent; // Novo: O GameObject pai que contém o sistema de partículas da chuva
-                                        // Este será o objeto que se moverá com o player.
-                                        // Se rainParticleSystem já é o pai, então basta atribuir ele mesmo.
+    public GameObject rainEffectParent;                             
 
     [Header("Player Tracking")]
     public Transform playerTransform; // Referência ao transform do player
@@ -25,18 +23,16 @@ public class RainManager : MonoBehaviour
     private ClimaSystem climaSystem;
 
     // Distância vertical da chuva em relação ao player
-    public float rainVerticalOffset = 20f; // Ex: A chuva fica 20 unidades acima do player
+    public float rainVerticalOffset = 20f; 
 
     void Start()
     {
-        // CORREÇÃO AQUI: Usando FindObjectOfType
         ciclo = FindObjectOfType<CicloDiaNoite>();
         climaSystem = FindObjectOfType<ClimaSystem>();
 
         // Tenta encontrar o player automaticamente se não for atribuído
         if (playerTransform == null)
         {
-            // Assumindo que seu player tem a tag "Player"
             GameObject playerGO = GameObject.FindGameObjectWithTag("Player");
             if (playerGO != null)
             {
@@ -53,23 +49,21 @@ public class RainManager : MonoBehaviour
         {
             if (rainParticleSystem != null)
             {
-                rainEffectParent = rainParticleSystem.gameObject; // Assume que o próprio sistema de partículas é o que deve ser movido
+                rainEffectParent = rainParticleSystem.gameObject; 
             }
             else
             {
                 Debug.LogError("[RainManager] 'rainEffectParent' ou 'rainParticleSystem' não estão atribuídos no Inspector. A chuva não poderá seguir o player.");
-                enabled = false; // Desativa o script se não houver referência essencial
+                enabled = false; 
                 return;
             }
         }
-
 
         CicloDiaNoite.OnNovoDia += VerificarChuva;
 
         if (rainParticleSystem != null)
         {
             rainParticleSystem.Stop(); // Garante que não comece chovendo por partículas ativas
-            // Garante que o objeto da chuva não esteja ativo visualmente se não estiver chovendo
             if (rainEffectParent != null)
             {
                 rainEffectParent.SetActive(false);
@@ -89,18 +83,15 @@ public class RainManager : MonoBehaviour
 
     void Update()
     {
-        // Se estiver chovendo e tivermos a referência do player e do objeto da chuva
         if (isRaining && playerTransform != null && rainEffectParent != null)
         {
-            // Move o objeto pai da chuva para a posição do player, mantendo um offset vertical
             rainEffectParent.transform.position = new Vector3(
                 playerTransform.position.x,
-                playerTransform.position.y + rainVerticalOffset, // Adiciona o offset vertical
+                playerTransform.position.y + rainVerticalOffset, 
                 playerTransform.position.z
             );
         }
 
-        // Lógica de agendamento de chuva (mantida do seu código)
         if (!isRaining && horaChuvaAgendada >= 0 && ciclo != null)
         {
             int horaAtual = Mathf.FloorToInt(ciclo.atualHoraDoDia * 24);
@@ -124,10 +115,10 @@ public class RainManager : MonoBehaviour
     {
         if ((diaAtual - ultimoDiaChuva) >= intervaloDias)
         {
-            bool vaiChoverHoje = UnityEngine.Random.value < 0.8f; // Usar UnityEngine.Random para evitar ambiguidade
+            bool vaiChoverHoje = UnityEngine.Random.value < 0.8f; 
             if (vaiChoverHoje)
             {
-                horaChuvaAgendada = UnityEngine.Random.Range(0f, 24f); // Usar UnityEngine.Random
+                horaChuvaAgendada = UnityEngine.Random.Range(0f, 24f); 
                 ultimoDiaChuva = diaAtual;
                 Debug.Log($"[RainManager] Chuva agendada para o dia {diaAtual} às {horaChuvaAgendada:0.0}h");
             }
@@ -136,7 +127,7 @@ public class RainManager : MonoBehaviour
 
     void StartRain()
     {
-        isRaining = true; // Atualiza estado interno
+        isRaining = true; 
         if (rainEffectParent != null) // Ativa o objeto pai da chuva
         {
             rainEffectParent.SetActive(true);
@@ -151,7 +142,7 @@ public class RainManager : MonoBehaviour
             climaSystem.UpdateWeatherState(ClimaSystem.WeatherCondition.Rainy);
         }
 
-        float duracao = UnityEngine.Random.Range(minRainDuration, maxRainDuration); // Usar UnityEngine.Random
+        float duracao = UnityEngine.Random.Range(minRainDuration, maxRainDuration); 
         Invoke("StopRain", duracao);
         Debug.Log($"[RainManager] Chuva começou! Duração: {duracao:0.0} segundos");
     }
@@ -162,7 +153,7 @@ public class RainManager : MonoBehaviour
         {
             rainParticleSystem.Stop();
         }
-        if (rainEffectParent != null) // Desativa o objeto pai da chuva
+        if (rainEffectParent != null) 
         {
             rainEffectParent.SetActive(false);
         }
