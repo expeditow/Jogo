@@ -1,5 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -8,65 +6,54 @@ public class DragDrop : MonoBehaviour, IBeginDragHandler, IEndDragHandler, IDrag
 {
     private RectTransform rectTransform;
     private CanvasGroup canvasGroup;
-
-    public static GameObject itemBeingDragged;
-    Vector3 startPosition;
-    Transform startParent;
     private Canvas canvas;
+
+    // --- A VARIÁVEL QUE ESTAVA FALTANDO ---
+    // Esta variável pública guardará a referência do slot de onde o item saiu.
+    public Transform parentAfterDrag;
 
     private void Awake()
     {
         rectTransform = GetComponent<RectTransform>();
         canvasGroup = GetComponent<CanvasGroup>();
-    }
-
-    private void Start()
-    {
-        // Pega a referência do canvas via singleton
-        canvas = ItemManager.Instance?.mainCanvas;
-
-        if (canvas == null)
-        {
-            Debug.LogError("Canvas não foi encontrado! Verifique se o ItemManager está na cena e se o mainCanvas foi atribuído.");
-        }
+        // Pega a referência do canvas principal de forma mais robusta
+        canvas = GetComponentInParent<Canvas>();
     }
 
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (canvas == null) return;
 
-        Debug.Log("OnBeginDrag");
+        // Guarda o slot de onde saiu
+        parentAfterDrag = transform.parent;
+        // Move o item para o topo da hierarquia do canvas para que fique na frente de tudo
+        transform.SetParent(canvas.transform);
+        transform.SetAsLastSibling();
+
+        // Deixa o ícone semitransparente e permite que o raycast passe por ele
         canvasGroup.alpha = .6f;
         canvasGroup.blocksRaycasts = false;
-
-        startPosition = transform.position;
-        startParent = transform.parent;
-
-        transform.SetParent(canvas.transform); // Manter no canvas para não ser afetado por layout
-        itemBeingDragged = gameObject;
     }
 
     public void OnDrag(PointerEventData eventData)
     {
         if (canvas == null) return;
-
-        // Move o item considerando o scale do canvas
+        // Move o ícone seguindo o mouse
         rectTransform.anchoredPosition += eventData.delta / canvas.scaleFactor;
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
-        if (canvas == null) return;
-
-        itemBeingDragged = null;
-
-        if (transform.parent == startParent || transform.parent == canvas.transform)
+        // O OnDrop do ItemSlot vai cuidar de definir o novo pai.
+        // Se, ao final do arrasto, o pai ainda for o canvas, significa que foi solto em um local inválido.
+        if (transform.parent == canvas.transform)
         {
-            transform.position = startPosition;
-            transform.SetParent(startParent);
+            // Devolve o item para o slot original
+            transform.SetParent(parentAfterDrag);
+            rectTransform.localPosition = Vector3.zero;
         }
 
-        Debug.Log("OnEndDrag");
+        // Restaura a aparência e o comportamento do ícone
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
     }

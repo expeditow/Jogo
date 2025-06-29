@@ -1,184 +1,224 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
+using System.Collections.Generic;
+using System.Linq;
+
+[System.Serializable]
+public class ItemData
+{
+    public string itemName;
+    public int maxStackSize;
+
+    [Header("Equippable Info")]
+    public bool isEquippable; // É um item que pode ser equipado?
+    public GameObject equippablePrefab; // O prefab que vai para a mão do jogador
+}
 
 public class InventorySystem : MonoBehaviour
 {
-    public static InventorySystem Instance { get; set; } 
+    public static InventorySystem Instance { get; set; }
 
+    [Header("UI e Slots")]
     public GameObject inventoryScreenUI;
-    public List<GameObject> slotList = new List<GameObject>();
-    public List<string> itemList = new List<string>(); 
+    private List<ItemSlot> slotList = new List<ItemSlot>();
+
+    [Header("Item Database")]
+    public List<ItemData> itemDatabase;
+    private Dictionary<string, ItemData> itemDictionary = new Dictionary<string, ItemData>();
 
     [Header("Configurações de Equipamento")]
-    public Transform playerHand; 
-    public GameObject currentlyEquippedItem = null; 
+    public Transform playerHand;
+    public GameObject currentlyEquippedItem = null;
 
-    private GameObject itemToAdd;
-    private GameObject whatSlotToEquip; 
-
-    public bool isOpen; 
+    public bool isOpen;
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
+        if (Instance != null && Instance != this) Destroy(gameObject); else Instance = this;
+        foreach (var itemData in itemDatabase)
         {
-            Destroy(gameObject);
-        }
-        else
-        {
-            Instance = this;
+            if (!itemDictionary.ContainsKey(itemData.itemName))
+            {
+                itemDictionary.Add(itemData.itemName, itemData);
+            }
         }
     }
 
     void Start()
     {
         isOpen = false;
-        if (inventoryScreenUI != null) 
+        if (inventoryScreenUI != null)
         {
-            inventoryScreenUI.SetActive(false); 
+            inventoryScreenUI.SetActive(false);
             PopulateSlotList();
-        }
-        else
-        {
-            Debug.LogError("InventorySystem: inventoryScreenUI não está atribuído no Inspector!");
-        }
-    }
-
-    private void PopulateSlotList()
-    {
-        if (inventoryScreenUI == null) return; 
-
-        foreach (Transform child in inventoryScreenUI.transform)
-        {
-            if (child.CompareTag("Slot"))
-            {
-                slotList.Add(child.gameObject);
-            }
         }
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.I)) 
+        if (Input.GetKeyDown(KeyCode.I))
         {
-            isOpen = !isOpen; 
+            isOpen = !isOpen;
             inventoryScreenUI.SetActive(isOpen);
             Cursor.lockState = isOpen ? CursorLockMode.None : CursorLockMode.Locked;
-            if (isOpen) Debug.Log("Inventário aberto"); else Debug.Log("Inventário fechado");
+        }
+
+        // ADICIONE ESTE BLOCO PARA LIMPEZA
+        if (Input.GetKeyDown(KeyCode.F10)) // Usaremos a tecla F10 para limpar
+        {
+            Debug.LogWarning("--- LIMPANDO TODOS OS SLOTS DO INVENTÁRIO ---");
+            foreach (var slot in slotList)
+            {
+                slot.ClearSlot();
+            }
         }
     }
 
-    public void AddToInventory(string itemName) 
+    private void PopulateSlotList()
     {
-        if (CheckIfFull())
+        if (inventoryScreenUI == null) return;
+        slotList = inventoryScreenUI.GetComponentsInChildren<ItemSlot>().ToList();
+        Debug.Log($"[InventorySystem] PopulateSlotList encontrou {slotList.Count} slots.");
+    }
+
+    public void AddToInventory(string itemName)
+    {
+        if (!itemDictionary.ContainsKey(itemName))
         {
-            Debug.LogWarning("Inventário cheio. Não foi possível pegar " + itemName);
+            Debug.LogError($"Item '{itemName}' não existe no banco de dados!");
             return;
         }
 
-        whatSlotToEquip = FindNextEmptySlot();
-
-        if (whatSlotToEquip == null) 
-        {
-            Debug.LogError("Não foi encontrado slot vazio para adicionar " + itemName);
-            return;
-        }
-
-        GameObject iconPrefab = Resources.Load<GameObject>(itemName);
+        ItemData data = itemDictionary[itemName];
+        GameObject iconPrefab = Resources.Load<GameObject>(itemName); // Carrega o prefab uma vez
 
         if (iconPrefab == null)
         {
-            Debug.LogError($"Prefab do ícone do item '{itemName}' não encontrado na pasta Resources.");
+            Debug.LogError($"Prefab do ícone '{itemName}' não encontrado na pasta Resources.");
             return;
         }
 
-        itemToAdd = Instantiate(iconPrefab, whatSlotToEquip.transform.position, Quaternion.identity);
-        itemToAdd.transform.SetParent(whatSlotToEquip.transform, false); 
-        itemToAdd.transform.localPosition = Vector3.zero;
-        itemToAdd.transform.localScale = Vector3.one; 
+        ItemSlot existingStack = FindIncompleteStack(itemName);
 
-
-        SlotItemClickHandler clickHandler = itemToAdd.GetComponent<SlotItemClickHandler>();
-        if (clickHandler == null)
+        if (existingStack != null)
         {
-            clickHandler = itemToAdd.AddComponent<SlotItemClickHandler>();
-            Debug.LogWarning($"SlotItemClickHandler adicionado dinamicamente a {itemName}. É melhor adicioná-lo ao prefab do ícone.");
-        }
-        clickHandler.Initialize(itemName);
-
-        itemList.Add(itemName);
-        Debug.Log($"Pegou: {itemName} e adicionou ao inventário.");
-    }
-
-    public bool CheckIfFull()
-    {
-        int counter = 0;
-        foreach (GameObject slot in slotList)
-        {
-            if (slot.transform.childCount > 0)
+            // Se encontramos um stack, primeiro garantimos que ele tenha um ícone visível.
+            if (existingStack.Item == null)
             {
-                counter++;
+                // Este é o caso do "slot fantasma"! Criamos o ícone que faltava.
+                GameObject newIconObject = Instantiate(iconPrefab, existingStack.transform);
+                newIconObject.tag = "ItemIcon";
+                // Adiciona o script de clique
+                if (newIconObject.GetComponent<SlotItemClickHandler>() == null)
+                {
+                    var handler = newIconObject.AddComponent<SlotItemClickHandler>();
+                    handler.Initialize(itemName);
+                }
+            }
+
+            // Agora, com a certeza de que o ícone existe, apenas atualizamos os dados.
+            existingStack.UpdateSlotData(itemName, existingStack.quantity + 1, data.maxStackSize);
+        }
+        else
+        {
+            ItemSlot emptySlot = FindNextEmptySlot();
+            if (emptySlot != null)
+            {
+                GameObject newIconObject = Instantiate(iconPrefab, emptySlot.transform);
+                newIconObject.tag = "ItemIcon";
+
+                if (newIconObject.GetComponent<SlotItemClickHandler>() == null)
+                {
+                    var handler = newIconObject.AddComponent<SlotItemClickHandler>();
+                    handler.Initialize(itemName);
+                }
+
+                emptySlot.UpdateSlotData(itemName, 1, data.maxStackSize);
+            }
+            else
+            {
+                Debug.Log("Inventário cheio! Não foi possível pegar " + itemName);
             }
         }
-        return counter >= slotList.Count;
     }
 
-    private GameObject FindNextEmptySlot()
+    private ItemSlot FindIncompleteStack(string itemName)
     {
-        foreach (GameObject slot in slotList)
+        foreach (ItemSlot slot in slotList)
         {
-            if (slot.transform.childCount == 0)
+            if (slot != null && slot.itemName == itemName && slot.quantity < slot.maxStackSize)
             {
                 return slot;
             }
         }
-        Debug.LogWarning("Nenhum slot vazio encontrado.");
-        return null; 
+        return null;
     }
+
+    private ItemSlot FindNextEmptySlot()
+    {
+        foreach (ItemSlot slot in slotList)
+        {
+            if (slot != null && string.IsNullOrEmpty(slot.itemName))
+            {
+                return slot;
+            }
+        }
+        return null;
+    }
+
+    // Seu método de equipar item continua aqui
     public void HandleItemEquipRequest(string itemNameFromSlot)
     {
-        Debug.Log($"InventorySystem recebeu pedido para equipar: {itemNameFromSlot}");
+        Debug.Log($"[DEBUG 1] Pedido para equipar '{itemNameFromSlot}' recebido.");
 
         if (playerHand == null)
         {
-            Debug.LogError("Player Hand transform não está atribuído no InventorySystem! Não é possível equipar.");
+            Debug.LogError("[FALHA] O campo 'Player Hand' no InventorySystem não está atribuído no Inspector!");
             return;
         }
 
-        if (itemNameFromSlot == "Pedra")
+        if (itemDictionary.TryGetValue(itemNameFromSlot, out ItemData data))
         {
-            string equippablePrefabName = "pedraMao"; 
+            Debug.Log($"[DEBUG 2] Dados para '{itemNameFromSlot}' encontrados no banco de dados.");
 
-            // 1. Desequipar item atual (se houver)
-            if (currentlyEquippedItem != null)
+            if (data.isEquippable)
             {
-                Destroy(currentlyEquippedItem);
-                currentlyEquippedItem = null;
-                Debug.Log("Item anterior desequipado.");
-            }
+                Debug.Log($"[DEBUG 3] O item é equipável. Verificando o prefab...");
 
-            GameObject prefabToEquip = Resources.Load<GameObject>(equippablePrefabName);
+                if (data.equippablePrefab == null)
+                {
+                    Debug.LogError($"[FALHA] O item '{itemNameFromSlot}' é equipável, mas o 'Equippable Prefab' não foi atribuído no Inspector!");
+                    return;
+                }
 
-            if (prefabToEquip != null)
-            {
-                currentlyEquippedItem = Instantiate(prefabToEquip, playerHand.position, playerHand.rotation);
-                currentlyEquippedItem.transform.SetParent(playerHand);
-                currentlyEquippedItem.transform.localPosition = Vector3.zero;
-                currentlyEquippedItem.transform.localRotation = Quaternion.identity;
-                currentlyEquippedItem.transform.localScale = Vector3.one; 
+                // Lógica de Toggle: Se o item já está equipado, desequipa.
+                if (currentlyEquippedItem != null && currentlyEquippedItem.name.StartsWith(data.equippablePrefab.name))
+                {
+                    Debug.Log($"[AÇÃO] Desequipando {currentlyEquippedItem.name}.");
+                    Destroy(currentlyEquippedItem);
+                    currentlyEquippedItem = null;
+                    return;
+                }
 
-                Debug.Log($"'{equippablePrefabName}' equipado na mão do jogador.");
+                if (currentlyEquippedItem != null)
+                {
+                    Destroy(currentlyEquippedItem);
+                }
+
+                currentlyEquippedItem = Instantiate(data.equippablePrefab, playerHand);
+                Debug.Log($"[SUCESSO] '{data.equippablePrefab.name}' equipado na mão do jogador.");
             }
             else
             {
-                Debug.LogError($"Prefab equipável '{equippablePrefabName}' não encontrado na pasta Resources.");
+                Debug.LogWarning($"[INFO] O item '{itemNameFromSlot}' não está marcado como equipável no Item Database.");
             }
         }
         else
         {
-            Debug.LogWarning($"Nenhuma ação de equipamento definida para: {itemNameFromSlot}");
+            Debug.LogError($"[FALHA] Não foi possível encontrar os dados para o item '{itemNameFromSlot}' no dicionário. Isso não deveria acontecer se o item está no inventário.");
         }
     }
-}
+
+
+
+} // <--- A CLASSE TERMINA AQUI. Verifique se não há nenhum código extra depois desta chave.
