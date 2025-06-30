@@ -1,0 +1,12 @@
+fileFormatVersion: 2
+guid: 27f98b2375fa8104fbf0ca0a6760c3b2
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - fagulhaPrefab: {fileID: 3111205524735691817, guid: 26fdaf851b2482045923dd6b4c4c4cb4, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
