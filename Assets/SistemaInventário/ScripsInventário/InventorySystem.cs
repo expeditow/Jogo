@@ -34,7 +34,18 @@ public class InventorySystem : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this) Destroy(gameObject); else Instance = this;
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+        }
+        else
+        {
+            Instance = this;
+            // --- SINAL DE VIDA ---
+            Debug.LogWarning(">>> INSTÂNCIA DO INVENTORYSYSTEM FOI CRIADA COM SUCESSO! <<<");
+        }
+
+        // Popula o dicionário de itens
         foreach (var itemData in itemDatabase)
         {
             if (!itemDictionary.ContainsKey(itemData.itemName))
@@ -169,53 +180,65 @@ public class InventorySystem : MonoBehaviour
     // Seu método de equipar item continua aqui
     public void HandleItemEquipRequest(string itemNameFromSlot)
     {
-        Debug.Log($"[DEBUG 1] Pedido para equipar '{itemNameFromSlot}' recebido.");
+        Debug.Log($"[1] Pedido para equipar '{itemNameFromSlot}' recebido.");
 
+        // Verificação 1: A mão do jogador está atribuída?
         if (playerHand == null)
         {
-            Debug.LogError("[FALHA] O campo 'Player Hand' no InventorySystem não está atribuído no Inspector!");
+            Debug.LogError("[FALHA] O campo 'Player Hand' no InventorySystem não está atribuído!");
             return;
         }
 
+        // Verificação 2: O item existe no banco de dados?
         if (itemDictionary.TryGetValue(itemNameFromSlot, out ItemData data))
         {
-            Debug.Log($"[DEBUG 2] Dados para '{itemNameFromSlot}' encontrados no banco de dados.");
+            Debug.Log($"[2] Dados para '{itemNameFromSlot}' encontrados.");
 
+            // Verificação 3: O item é equipável?
             if (data.isEquippable)
             {
-                Debug.Log($"[DEBUG 3] O item é equipável. Verificando o prefab...");
+                Debug.Log($"[3] O item é equipável.");
 
+                // Verificação 4: O prefab do item de mão existe?
                 if (data.equippablePrefab == null)
                 {
-                    Debug.LogError($"[FALHA] O item '{itemNameFromSlot}' é equipável, mas o 'Equippable Prefab' não foi atribuído no Inspector!");
+                    Debug.LogError($"[FALHA] O item '{itemNameFromSlot}' é equipável, mas o 'Equippable Prefab' não foi atribuído!");
                     return;
                 }
 
-                // Lógica de Toggle: Se o item já está equipado, desequipa.
+                // Se o item já está equipado, desequipa.
                 if (currentlyEquippedItem != null && currentlyEquippedItem.name.StartsWith(data.equippablePrefab.name))
                 {
-                    Debug.Log($"[AÇÃO] Desequipando {currentlyEquippedItem.name}.");
+                    Debug.Log($"[AÇÃO] Desequipando item.");
                     Destroy(currentlyEquippedItem);
                     currentlyEquippedItem = null;
                     return;
                 }
 
+                // Se outro item estiver equipado, destrói ele primeiro.
                 if (currentlyEquippedItem != null)
                 {
                     Destroy(currentlyEquippedItem);
                 }
 
-                currentlyEquippedItem = Instantiate(data.equippablePrefab, playerHand);
-                Debug.Log($"[SUCESSO] '{data.equippablePrefab.name}' equipado na mão do jogador.");
+                // --- PONTO CRÍTICO DA LÓGICA ---
+                // Cria o item como filho da mão e zera sua posição e rotação locais.
+                GameObject newEquippedItem = Instantiate(data.equippablePrefab, playerHand);
+                newEquippedItem.transform.localPosition = Vector3.zero;
+                newEquippedItem.transform.localRotation = Quaternion.identity;
+                currentlyEquippedItem = newEquippedItem;
+                // ------------------------------------
+
+                Debug.Log($"[SUCESSO] '{currentlyEquippedItem.name}' foi criado na mão do jogador.");
             }
             else
             {
-                Debug.LogWarning($"[INFO] O item '{itemNameFromSlot}' não está marcado como equipável no Item Database.");
+                Debug.LogWarning($"[INFO] O item '{itemNameFromSlot}' não está marcado como equipável.");
             }
         }
         else
         {
-            Debug.LogError($"[FALHA] Não foi possível encontrar os dados para o item '{itemNameFromSlot}' no dicionário. Isso não deveria acontecer se o item está no inventário.");
+            Debug.LogError($"[FALHA] Não foi possível encontrar os dados para '{itemNameFromSlot}' no dicionário.");
         }
     }
 

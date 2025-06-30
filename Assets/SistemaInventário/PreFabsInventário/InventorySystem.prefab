@@ -45,6 +45,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   inventoryScreenUI: {fileID: 0}
-  slotList: []
-  itemList: []
+  itemDatabase:
+  - itemName: 
+    maxStackSize: 0
+    isEquippable: 0
+    equippablePrefab: {fileID: 0}
+  playerHand: {fileID: 0}
+  currentlyEquippedItem: {fileID: 0}
   isOpen: 0

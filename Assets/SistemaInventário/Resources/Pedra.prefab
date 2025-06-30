@@ -13,7 +13,6 @@ GameObject:
   - component: {fileID: 8594763021468885076}
   - component: {fileID: 7012077417478899878}
   - component: {fileID: 3783323616972833868}
-  - component: {fileID: -7317525666626426966}
   m_Layer: 0
   m_Name: Pedra
   m_TagString: ItemIcon
@@ -52,6 +51,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 78c3f3f11ba5256449877b6f3babe5de, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  parentAfterDrag: {fileID: 0}
 --- !u!225 &8594763021468885076
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -102,16 +102,3 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &-7317525666626426966
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4063727864440113930}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b009af8ee3700b74aaba95a893871895, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  itemName: 
