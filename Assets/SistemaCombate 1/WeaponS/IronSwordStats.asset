@@ -16,3 +16,5 @@ MonoBehaviour:
   baseAttackCooldown: 0.5
   baseAttackActivationDelay: 0.2
   baseAttackRange: 2
+  attackStaminaCost: 10
+  attackLogicPrefab: {fileID: 5631847044922440398, guid: 8a8e0bbca70a94b44bcdad42fa8574bc, type: 3}

@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.AI;
 using System.Collections;
 
-public class EnemyAI : MonoBehaviour
+public class InimigoNormal : MonoBehaviour
 {
     [Header("Referências Principais")]
     public NavMeshAgent agent;
@@ -12,17 +12,17 @@ public class EnemyAI : MonoBehaviour
     public LayerMask whatIsGround;
     public LayerMask whatIsPlayer;
 
-    [Header("Configurações de Patrulha Aleatória")]
-    public float walkPointRange = 20f;
-    public float patrolPauseDuration = 3f;
+    // --- VARIÁVEIS DE PATRULHA POR WAYPOINTS ---
+    [Header("Configurações de Patrulha por Waypoints")]
+    public Transform[] patrolPoints; // Lista de pontos para patrulhar
+    public float patrolPauseDuration = 3f; // Pausa em cada ponto
+    private int currentPatrolIndex = 0;
     private bool isWaiting = false;
-    private Vector3 walkPoint;
-    private bool walkPointSet;
 
     [Header("Configurações de Perseguição e Ataque")]
     public float sightRange = 15f;
     public float attackRange = 2f;
-    public int attackDamage = 10; // Garanta que este valor seja maior que 0 no Inspector
+    public int attackDamage = 10;
     public float timeBetweenAttacks = 2f;
     private bool alreadyAttacked;
 
@@ -32,15 +32,13 @@ public class EnemyAI : MonoBehaviour
 
     private void Awake()
     {
+        // ... (o método Awake continua o mesmo)
         GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
-        if (playerObject != null)
-        {
-            player = playerObject.transform;
-        }
+        if (playerObject != null) player = playerObject.transform;
         else
         {
             Debug.LogError("INIMIGO " + name + ": Não encontrou o jogador na cena! Verifique se o jogador tem a tag 'Player'.", this);
-            this.enabled = false; // Desativa o script se não encontrar o jogador
+            this.enabled = false;
         }
 
         agent = GetComponent<NavMeshAgent>();
@@ -53,33 +51,32 @@ public class EnemyAI : MonoBehaviour
 
     private void Update()
     {
+        // ... (o método Update continua o mesmo)
         playerInSightRange = Physics.CheckSphere(transform.position, sightRange, whatIsPlayer);
         playerInAttackRange = Physics.CheckSphere(transform.position, attackRange, whatIsPlayer);
 
-        // Máquina de estados que garante que apenas uma ação ocorra por vez
-        if (!playerInSightRange && !playerInAttackRange)
-        {
-            Patroling();
-        }
-        else if (playerInSightRange && !playerInAttackRange)
-        {
-            ChasePlayer();
-        }
-        else if (playerInAttackRange && playerInSightRange)
-        {
-            AttackPlayer();
-        }
+        if (!playerInSightRange && !playerInAttackRange) Patroling();
+        else if (playerInSightRange && !playerInAttackRange) ChasePlayer();
+        else if (playerInAttackRange && playerInSightRange) AttackPlayer();
     }
 
+    // --- LÓGICA DE PATRULHA REESCRITA PARA WAYPOINTS ---
     private void Patroling()
     {
-        if (!walkPointSet && !isWaiting) SearchWalkPoint();
-
-        if (walkPointSet) agent.SetDestination(walkPoint);
-
-        if (walkPointSet && agent.remainingDistance <= agent.stoppingDistance && !isWaiting)
+        // Se não houver pontos de patrulha definidos, não faz nada.
+        if (patrolPoints.Length == 0 || isWaiting)
         {
-            if (!agent.pathPending) StartCoroutine(PatrolWait());
+            return;
+        }
+
+        // Define o destino para o ponto de patrulha atual.
+        Transform targetPoint = patrolPoints[currentPatrolIndex];
+        agent.SetDestination(targetPoint.position);
+
+        // Se chegou ao destino, inicia a pausa.
+        if (agent.remainingDistance <= agent.stoppingDistance && !agent.pathPending)
+        {
+            StartCoroutine(PatrolWait());
         }
     }
 
@@ -88,24 +85,22 @@ public class EnemyAI : MonoBehaviour
         isWaiting = true;
         agent.isStopped = true;
         yield return new WaitForSeconds(patrolPauseDuration);
-        walkPointSet = false;
+
+        GoToNextWaypoint(); // Após a pausa, vai para o próximo ponto.
+
         isWaiting = false;
         agent.isStopped = false;
     }
 
-    private void SearchWalkPoint()
+    private void GoToNextWaypoint()
     {
-        float randomZ = Random.Range(-walkPointRange, walkPointRange);
-        float randomX = Random.Range(-walkPointRange, walkPointRange);
-        Vector3 randomPoint = new Vector3(transform.position.x + randomX, transform.position.y, transform.position.z + randomZ);
+        if (patrolPoints.Length == 0) return;
 
-        NavMeshHit hit;
-        if (NavMesh.SamplePosition(randomPoint, out hit, walkPointRange, NavMesh.AllAreas))
-        {
-            walkPoint = hit.position;
-            walkPointSet = true;
-        }
+        // Avança para o próximo índice na lista, voltando ao início se chegar no final.
+        currentPatrolIndex = (currentPatrolIndex + 1) % patrolPoints.Length;
     }
+
+    // ... (ChasePlayer, AttackPlayer e o resto continuam iguais)
 
     private void ChasePlayer()
     {
@@ -121,36 +116,31 @@ public class EnemyAI : MonoBehaviour
     private void AttackPlayer()
     {
         agent.isStopped = true;
-        transform.LookAt(player);
+
+        Vector3 positionToLookAt = player.position;
+        positionToLookAt.y = transform.position.y;
+        transform.LookAt(positionToLookAt);
 
         if (!alreadyAttacked)
         {
-            // --- VERIFICAÇÕES DE SEGURANÇA ADICIONADAS ---
-
-            // 1. Verifica se o dano do ataque é válido.
             if (attackDamage <= 0)
             {
-                Debug.LogWarning("AVISO: Dano de ataque do inimigo " + name + " é 0 ou menor. Ele não causará dano.", this);
-                // Mesmo com dano 0, vamos ativar o cooldown para o ataque não ficar em loop.
+                Debug.LogWarning("AVISO: Dano de ataque do inimigo " + name + " é 0 ou menor.", this);
                 alreadyAttacked = true;
                 Invoke(nameof(ResetAttack), timeBetweenAttacks);
-                return; // Para a execução do ataque aqui.
+                return;
             }
 
-            // 2. Tenta encontrar o script de vida do jogador.
             PlayerHealth playerHealth = player.GetComponent<PlayerHealth>();
-            if (playerHealth == null)
+            if (playerHealth != null)
             {
-                Debug.LogError("ATAQUE FALHOU: Inimigo " + name + " não encontrou o script 'PlayerHealth' no objeto " + player.name, this);
+                playerHealth.TakeDamage(attackDamage);
             }
             else
             {
-                // 3. Se tudo estiver certo, causa o dano.
-                Debug.Log(name + " atacando " + player.name + " e causando " + attackDamage + " de dano.");
-                playerHealth.TakeDamage(attackDamage);
+                Debug.LogError("ATAQUE FALHOU: Inimigo " + name + " não encontrou o script 'PlayerHealth' no objeto " + player.name, this);
             }
 
-            // Ativa o cooldown do ataque para evitar ataques em todos os frames.
             alreadyAttacked = true;
             Invoke(nameof(ResetAttack), timeBetweenAttacks);
         }
