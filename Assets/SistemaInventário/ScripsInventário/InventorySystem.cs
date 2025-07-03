@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 using System.Linq;
 
+// A CLASSE ITEMDATA EST√Å DEFINIDA AQUI, DENTRO DESTE MESMO ARQUIVO!
+// Ela √© [System.Serializable] para aparecer no Inspector do Unity.
 [System.Serializable]
 public class ItemData
 {
@@ -10,8 +12,20 @@ public class ItemData
     public int maxStackSize;
 
     [Header("Equippable Info")]
-    public bool isEquippable; // … um item que pode ser equipado?
-    public GameObject equippablePrefab; // O prefab que vai para a m„o do jogador
+    public bool isEquippable;
+    public GameObject equippablePrefab;
+    public Vector3 equipPositionOffset = Vector3.zero;
+    public Vector3 equipRotationOffset = Vector3.zero;
+
+    public WeaponStats weaponStats;
+
+    // --- NOVAS VARI√ÅVEIS PARA ITENS CONSUM√çVEIS ---
+    [Header("Consumable Info")]
+    public bool isConsumable;       // Pode ser consumido?
+    public float hungerRestoration; // Quanto de fome restaura (se aplic√°vel)
+    public float healthRestoration; // Quanto de vida restaura (se aplic√°vel)
+    public AudioClip consumeSound;  // Som ao consumir
+    // --- FIM DAS NOVAS VARI√ÅVEIS ---
 }
 
 public class InventorySystem : MonoBehaviour
@@ -23,14 +37,17 @@ public class InventorySystem : MonoBehaviour
     private List<ItemSlot> slotList = new List<ItemSlot>();
 
     [Header("Item Database")]
-    public List<ItemData> itemDatabase;
+    public List<ItemData> itemDatabase; // Esta lista usa a classe ItemData definida acima
     private Dictionary<string, ItemData> itemDictionary = new Dictionary<string, ItemData>();
 
-    [Header("ConfiguraÁıes de Equipamento")]
+    [Header("Configura√ß√µes de Equipamento")]
     public Transform playerHand;
     public GameObject currentlyEquippedItem = null;
 
-    public bool isOpen;
+    [Header("Controlador de Ataque do Jogador")] // Novo cabe√ßalho para organizar no Inspector
+    public CylinderMeleeAttack playerAttackController;
+
+    public bool isOpen; // Indicates if the inventory is currently open
 
     private void Awake()
     {
@@ -41,11 +58,10 @@ public class InventorySystem : MonoBehaviour
         else
         {
             Instance = this;
-            // --- SINAL DE VIDA ---
-            Debug.LogWarning(">>> INST¬NCIA DO INVENTORYSYSTEM FOI CRIADA COM SUCESSO! <<<");
+            Debug.LogWarning(">>> INST√ÇNCIA DO INVENTORYSYSTEM FOI CRIADA COM SUCESSO! <<<");
         }
 
-        // Popula o dicion·rio de itens
+        // Populate the item dictionary
         foreach (var itemData in itemDatabase)
         {
             if (!itemDictionary.ContainsKey(itemData.itemName))
@@ -69,15 +85,13 @@ public class InventorySystem : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.I))
         {
-            isOpen = !isOpen;
-            inventoryScreenUI.SetActive(isOpen);
-            Cursor.lockState = isOpen ? CursorLockMode.None : CursorLockMode.Locked;
+            ToggleInventory();
         }
 
-        // ADICIONE ESTE BLOCO PARA LIMPEZA
-        if (Input.GetKeyDown(KeyCode.F10)) // Usaremos a tecla F10 para limpar
+        // Block for cleaning (keep for debugging)
+        if (Input.GetKeyDown(KeyCode.F10))
         {
-            Debug.LogWarning("--- LIMPANDO TODOS OS SLOTS DO INVENT¡RIO ---");
+            Debug.LogWarning("--- CLEARING ALL INVENTORY SLOTS ---");
             foreach (var slot in slotList)
             {
                 slot.ClearSlot();
@@ -85,27 +99,53 @@ public class InventorySystem : MonoBehaviour
         }
     }
 
+    // New method to open/close the inventory
+    public void ToggleInventory()
+    {
+        isOpen = !isOpen;
+        if (inventoryScreenUI != null)
+        {
+            inventoryScreenUI.SetActive(isOpen);
+            if (isOpen)
+            {
+                Cursor.lockState = CursorLockMode.None; // Unlock cursor
+            }
+            else
+            {
+                // Check if the crafting panel is NOT open before locking the cursor
+                // This prevents the cursor from being locked if the player closes the inventory, but crafting is still open
+                if (CraftingSystem.Instance == null || !CraftingSystem.Instance.IsCraftingPanelOpen()) // Use a getter method for IsCraftingPanelOpen
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                }
+            }
+
+            // Notify SelectionManager about UI state
+            SelectionManager.IsAnyUIOpen = isOpen;
+        }
+    }
+
     private void PopulateSlotList()
     {
         if (inventoryScreenUI == null) return;
         slotList = inventoryScreenUI.GetComponentsInChildren<ItemSlot>().ToList();
-        Debug.Log($"[InventorySystem] PopulateSlotList encontrou {slotList.Count} slots.");
+        Debug.Log($"[InventorySystem] PopulateSlotList found {slotList.Count} slots.");
     }
 
     public void AddToInventory(string itemName)
     {
         if (!itemDictionary.ContainsKey(itemName))
         {
-            Debug.LogError($"Item '{itemName}' n„o existe no banco de dados!");
+            Debug.LogError($"Item '{itemName}' does not exist in the database!");
             return;
         }
 
-        ItemData data = itemDictionary[itemName];
-        GameObject iconPrefab = Resources.Load<GameObject>(itemName); // Carrega o prefab uma vez
+        ItemData data = itemDictionary[itemName]; // Usa a classe ItemData
+        GameObject iconPrefab = Resources.Load<GameObject>(itemName); // Load the prefab once
 
         if (iconPrefab == null)
         {
-            Debug.LogError($"Prefab do Ìcone '{itemName}' n„o encontrado na pasta Resources.");
+            Debug.LogError($"Icon prefab '{itemName}' not found in the Resources folder.");
             return;
         }
 
@@ -113,21 +153,17 @@ public class InventorySystem : MonoBehaviour
 
         if (existingStack != null)
         {
-            // Se encontramos um stack, primeiro garantimos que ele tenha um Ìcone visÌvel.
             if (existingStack.Item == null)
             {
-                // Este È o caso do "slot fantasma"! Criamos o Ìcone que faltava.
                 GameObject newIconObject = Instantiate(iconPrefab, existingStack.transform);
                 newIconObject.tag = "ItemIcon";
-                // Adiciona o script de clique
                 if (newIconObject.GetComponent<SlotItemClickHandler>() == null)
                 {
                     var handler = newIconObject.AddComponent<SlotItemClickHandler>();
-                    handler.Initialize(itemName);
+                    // ATUALIZA√á√ÉO AQUI: Passando existingStack como o ItemSlot pai
+                    handler.Initialize(itemName, existingStack);
                 }
             }
-
-            // Agora, com a certeza de que o Ìcone existe, apenas atualizamos os dados.
             existingStack.UpdateSlotData(itemName, existingStack.quantity + 1, data.maxStackSize);
         }
         else
@@ -141,15 +177,103 @@ public class InventorySystem : MonoBehaviour
                 if (newIconObject.GetComponent<SlotItemClickHandler>() == null)
                 {
                     var handler = newIconObject.AddComponent<SlotItemClickHandler>();
-                    handler.Initialize(itemName);
+                    // ATUALIZA√á√ÉO AQUI: Passando emptySlot como o ItemSlot pai
+                    handler.Initialize(itemName, emptySlot);
                 }
 
                 emptySlot.UpdateSlotData(itemName, 1, data.maxStackSize);
             }
             else
             {
-                Debug.Log("Invent·rio cheio! N„o foi possÌvel pegar " + itemName);
+                Debug.Log("Inventory full! Could not pick up " + itemName);
             }
+        }
+    }
+    public void UseEquippedItem()
+    {
+        if (currentlyEquippedItem == null)
+        {
+            Debug.LogWarning("Nenhum item equipado para usar.");
+            return;
+        }
+
+        string equippedItemName = GetEquippedItemName(); // Pega o nome "limpo" do item equipado
+
+        if (string.IsNullOrEmpty(equippedItemName))
+        {
+            Debug.LogWarning("Nome do item equipado √© nulo ou vazio.");
+            return;
+        }
+
+        if (itemDictionary.TryGetValue(equippedItemName, out ItemData data))
+        {
+            if (data.isConsumable)
+            {
+                Debug.Log($"Usando item: {equippedItemName}");
+
+                // Aplicar efeitos de consumo
+                if (data.hungerRestoration > 0 && PlayerHunger.Instance != null)
+                {
+                    PlayerHunger.Instance.AddHunger(data.hungerRestoration);
+                }
+                if (data.healthRestoration > 0 && PlayerHealth.Instance != null) // Certifique-se que PlayerHealth √© um Singleton ou referencia ele
+                {
+                    // Se PlayerHealth n√£o for um Singleton, voc√™ precisar√° de uma refer√™ncia p√∫blica para ele
+                    // Ex: public PlayerHealth playerHealth; e arrastar no Inspector, ou GetComponent no Awake
+                    PlayerHealth.Instance.Heal(data.healthRestoration); // Chame o m√©todo Heal
+                }
+
+                // Tocar som de consumo (se tiver um AudioSource e AudioClip)
+                // Se o player tiver um AudioSource, pode ser usado:
+                // var playerAudioSource = FindObjectOfType<AudioSource>(); // Ou refer√™ncia mais espec√≠fica
+                // if (data.consumeSound != null && playerAudioSource != null)
+                // {
+                //     playerAudioSource.PlayOneShot(data.consumeSound);
+                // }
+
+                // Remover o item consumido do slot equipado
+                // Isso √© mais complexo: precisamos saber de qual slot o item veio para remover 1 unidade
+                // Por agora, vamos simplificar: se o item √© consum√≠vel e est√° equipado, ele √© removido.
+                // Uma implementa√ß√£o mais robusta envolveria passar o ItemSlot de origem do item equipado
+                // para o HandleItemEquipRequest ou ter uma forma de remover 1 unidade do slot.
+
+                // Para uma solu√ß√£o r√°pida: desequipe o item (ele ser√° destru√≠do)
+                // E, se for um item stackable, idealmente voc√™ removeria 1 da pilha no invent√°rio
+                // Por enquanto, vamos assumir que consumir remove o item equipado e o destruiria.
+                // Voc√™ pode adicionar l√≥gica aqui para remover 1 da pilha no invent√°rio.
+
+                // --- REMO√á√ÉO DO ITEM CONSUMIDO (SIMPLIFICADO PARA TESTE) ---
+                // Para uma remo√ß√£o correta: Encontre o slot que cont√©m o item equipado
+                ItemSlot equippedSlot = slotList.Find(slot => slot.itemName == equippedItemName);
+                if (equippedSlot != null)
+                {
+                    equippedSlot.quantity--;
+                    if (equippedSlot.quantity <= 0)
+                    {
+                        HandleItemEquipRequest(equippedItemName); // Desequipa e destr√≥i o visual da m√£o
+                        equippedSlot.ClearSlot(); // Limpa o slot do invent√°rio
+                        Debug.Log($"Item '{equippedItemName}' consumido e removido do invent√°rio.");
+                    }
+                    else
+                    {
+                        equippedSlot.UpdateSlotUI(); // Atualiza a quantidade no slot
+                        Debug.Log($"Item '{equippedItemName}' consumido. Quantidade restante: {equippedSlot.quantity}.");
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"N√£o foi poss√≠vel encontrar o slot para remover '{equippedItemName}' ap√≥s o consumo.");
+                }
+
+            }
+            else
+            {
+                Debug.LogWarning($"Item '{equippedItemName}' n√£o √© consum√≠vel.");
+            }
+        }
+        else
+        {
+            Debug.LogError($"Dados para '{equippedItemName}' n√£o encontrados no dicion√°rio de itens.");
         }
     }
 
@@ -177,71 +301,145 @@ public class InventorySystem : MonoBehaviour
         return null;
     }
 
-    // Seu mÈtodo de equipar item continua aqui
     public void HandleItemEquipRequest(string itemNameFromSlot)
     {
         Debug.Log($"[1] Pedido para equipar '{itemNameFromSlot}' recebido.");
 
-        // VerificaÁ„o 1: A m„o do jogador est· atribuÌda?
         if (playerHand == null)
         {
-            Debug.LogError("[FALHA] O campo 'Player Hand' no InventorySystem n„o est· atribuÌdo!");
+            Debug.LogError("[FALHA] O campo 'Player Hand' no InventorySystem n√£o est√° atribu√≠do!");
+            return;
+        }
+        // ---> NOVA LINHA: Verifica√ß√£o crucial para o controlador de ataque <---
+        if (playerAttackController == null)
+        {
+            Debug.LogError("[FALHA] O campo 'Player Attack Controller' no InventorySystem n√£o est√° atribu√≠do! N√£o √© poss√≠vel atualizar a l√≥gica da arma.");
             return;
         }
 
-        // VerificaÁ„o 2: O item existe no banco de dados?
         if (itemDictionary.TryGetValue(itemNameFromSlot, out ItemData data))
         {
             Debug.Log($"[2] Dados para '{itemNameFromSlot}' encontrados.");
 
-            // VerificaÁ„o 3: O item È equip·vel?
             if (data.isEquippable)
             {
-                Debug.Log($"[3] O item È equip·vel.");
+                Debug.Log($"[3] O item √© equip√°vel.");
 
-                // VerificaÁ„o 4: O prefab do item de m„o existe?
                 if (data.equippablePrefab == null)
                 {
-                    Debug.LogError($"[FALHA] O item '{itemNameFromSlot}' È equip·vel, mas o 'Equippable Prefab' n„o foi atribuÌdo!");
+                    Debug.LogError($"[FALHA] O item '{itemNameFromSlot}' √© equip√°vel, mas o 'Equippable Prefab' n√£o foi atribu√≠do!");
                     return;
                 }
 
-                // Se o item j· est· equipado, desequipa.
+                // L√≥gica para DESEQUIPAR o item atual
                 if (currentlyEquippedItem != null && currentlyEquippedItem.name.StartsWith(data.equippablePrefab.name))
                 {
-                    Debug.Log($"[A«√O] Desequipando item.");
+                    Debug.Log($"[A√á√ÉO] Desequipando item.");
                     Destroy(currentlyEquippedItem);
                     currentlyEquippedItem = null;
+
+                    // ---> NOVA LINHA: Informa ao controlador de ataque que nenhuma arma est√° equipada <---
+                    playerAttackController.SetCurrentWeaponStats(null);
                     return;
                 }
 
-                // Se outro item estiver equipado, destrÛi ele primeiro.
+                // L√≥gica para EQUIPAR um novo item (destruindo o antigo se houver)
                 if (currentlyEquippedItem != null)
                 {
                     Destroy(currentlyEquippedItem);
                 }
 
-                // --- PONTO CRÕTICO DA L”GICA ---
-                // Cria o item como filho da m„o e zera sua posiÁ„o e rotaÁ„o locais.
                 GameObject newEquippedItem = Instantiate(data.equippablePrefab, playerHand);
+
                 newEquippedItem.transform.localPosition = Vector3.zero;
                 newEquippedItem.transform.localRotation = Quaternion.identity;
-                currentlyEquippedItem = newEquippedItem;
-                // ------------------------------------
 
-                Debug.Log($"[SUCESSO] '{currentlyEquippedItem.name}' foi criado na m„o do jogador.");
+                newEquippedItem.transform.localPosition += data.equipPositionOffset;
+                newEquippedItem.transform.localRotation *= Quaternion.Euler(data.equipRotationOffset);
+
+                currentlyEquippedItem = newEquippedItem;
+                Debug.Log($"[SUCESSO] '{currentlyEquippedItem.name}' foi criado na m√£o do jogador com offsets.");
+
+                // ---> NOVA LINHA: Envia os stats da nova arma para o controlador de ataque! <---
+                playerAttackController.SetCurrentWeaponStats(data.weaponStats);
             }
             else
             {
-                Debug.LogWarning($"[INFO] O item '{itemNameFromSlot}' n„o est· marcado como equip·vel.");
+                Debug.LogWarning($"[INFO] O item '{itemNameFromSlot}' n√£o est√° marcado como equip√°vel.");
+                // ---> NOVA LINHA (Opcional, mas bom): Se o item n√£o √© equip√°vel, garante que a l√≥gica de ataque seja nula <---
+                playerAttackController.SetCurrentWeaponStats(null);
             }
         }
         else
         {
-            Debug.LogError($"[FALHA] N„o foi possÌvel encontrar os dados para '{itemNameFromSlot}' no dicion·rio.");
+            Debug.LogError($"[FALHA] N√£o foi poss√≠vel encontrar os dados para '{itemNameFromSlot}' no dicion√°rio.");
         }
     }
 
+    public bool HasItem(string itemName, int quantity)
+    {
+        int currentQuantity = 0;
+        foreach (var slot in slotList)
+        {
+            if (slot.itemName == itemName)
+            {
+                currentQuantity += slot.quantity;
+            }
+        }
+        return currentQuantity >= quantity;
+    }
 
+    public void RemoveItem(string itemName, int quantityToRemove)
+    {
+        if (!HasItem(itemName, quantityToRemove))
+        {
+            Debug.LogWarning($"Tentando remover {quantityToRemove} de {itemName}, mas o jogador n√£o tem o suficiente.");
+            return;
+        }
 
-} // <--- A CLASSE TERMINA AQUI. Verifique se n„o h· nenhum cÛdigo extra depois desta chave.
+        int removedCount = 0;
+        for (int i = 0; i < slotList.Count && removedCount < quantityToRemove; i++)
+        {
+            ItemSlot slot = slotList[i];
+            if (slot.itemName == itemName)
+            {
+                int canRemoveFromSlot = Mathf.Min(slot.quantity, quantityToRemove - removedCount);
+                slot.quantity -= canRemoveFromSlot;
+                removedCount += canRemoveFromSlot;
+
+                if (slot.quantity <= 0)
+                {
+                    slot.ClearSlot();
+                }
+                else
+                {
+                    slot.UpdateSlotUI();
+                }
+            }
+        }
+        Debug.Log($"Removidos {quantityToRemove} de {itemName} do invent√°rio.");
+    }
+    // Dentro da classe InventorySystem
+    public string GetEquippedItemName()
+    {
+        if (currentlyEquippedItem != null)
+        {
+            // O nome do prefab pode ter "(Clone)" no final.
+            // Precisamos do nome base para comparar.
+            return currentlyEquippedItem.name.Replace("(Clone)", "").Trim();
+        }
+        return null; // Retorna null se n√£o houver nada equipado
+    }
+
+    // Voc√™ tamb√©m pode querer um m√©todo para verificar o ItemData do item equipado
+    public ItemData GetEquippedItemData()
+    {
+        string equippedName = GetEquippedItemName();
+        if (!string.IsNullOrEmpty(equippedName) && itemDictionary.ContainsKey(equippedName))
+        {
+            return itemDictionary[equippedName];
+        }
+        return null;
+    }
+
+}

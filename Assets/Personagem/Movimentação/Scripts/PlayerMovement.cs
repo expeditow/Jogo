@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.UI;
+using UnityEngine.UI; // Certifique-se de que este using está presente
 
 public class PlayerMovement : MonoBehaviour
 {
@@ -52,7 +52,6 @@ public class PlayerMovement : MonoBehaviour
         float z = Input.GetAxis("Vertical");
 
         // --- LÓGICA PRINCIPAL DA ESTAMINA E CORRIDA ---
-        // A condição "currentStamina > 0" impede a corrida quando a estamina acaba.
         isSprinting = Input.GetKey(KeyCode.LeftShift) && isGrounded && currentStamina > 0 && z > 0;
 
         float currentSpeed;
@@ -87,5 +86,33 @@ public class PlayerMovement : MonoBehaviour
         {
             staminaBar.value = currentStamina;
         }
+    }
+
+    // --- MÉTODOS PÚBLICOS PARA O SISTEMA DE COMBATE ACESSAR A ESTAMINA ---
+    public float GetCurrentStamina()
+    {
+        return currentStamina;
+    }
+
+    public void ConsumeStamina(float amount)
+    {
+        currentStamina -= amount;
+        currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina); // Garante que não vai abaixo de 0
+        if (staminaBar != null)
+        {
+            staminaBar.value = currentStamina; // Atualiza a UI
+        }
+        Debug.Log($"ESTAMINA: Consumiu {amount} de estamina. Estamina atual: {currentStamina}");
+    }
+
+    public void RegenerateStamina(float amount)
+    {
+        currentStamina += amount;
+        currentStamina = Mathf.Clamp(currentStamina, 0f, maxStamina); // Garante que não vai acima de maxStamina
+        if (staminaBar != null)
+        {
+            staminaBar.value = currentStamina; // Atualiza a UI
+        }
+        Debug.Log($"ESTAMINA: Regenerou {amount} de estamina. Estamina atual: {currentStamina}");
     }
 }

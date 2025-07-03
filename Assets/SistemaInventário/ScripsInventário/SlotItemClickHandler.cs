@@ -1,42 +1,62 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
+using UnityEngine.EventSystems; // Necessário para IPointerClickHandler
 
 public class SlotItemClickHandler : MonoBehaviour, IPointerClickHandler
 {
-    public string itemName; // Esta variável será preenchida pelo InventorySystem
+    // O nome do item que este ícone representa
+    private string itemName;
 
+    // Tempo máximo entre cliques para ser considerado um clique duplo
+    private const float DOUBLE_CLICK_TIME = 0.3f; // 0.3 segundos
     private float lastClickTime = 0f;
-    private const float DOUBLE_CLICK_TIME = 0.3f;
 
-    // --- O MÉTODO QUE ESTAVA FALTANDO ---
-    // Este método permite que o InventorySystem "diga" a este script qual é o nome do item.
-    public void Initialize(string name)
+    // Referência ao ItemSlot pai para obter os dados do slot
+    private ItemSlot parentItemSlot;
+
+    // MÉTODO DE INICIALIZAÇÃO ATUALIZADO:
+    // Agora recebe a referência do ItemSlot diretamente
+    public void Initialize(string name, ItemSlot slot)
     {
-        this.itemName = name;
+        itemName = name;
+        parentItemSlot = slot; // Atribui a referência diretamente
+        if (parentItemSlot == null)
+        {
+            Debug.LogError($"[SlotItemClickHandler] A referência do ItemSlot passada para {gameObject.name} é nula.");
+        }
     }
 
-    // O método OnPointerClick agora funcionará corretamente
+    // Este método é chamado quando o GameObject é clicado
     public void OnPointerClick(PointerEventData eventData)
     {
-        // Verifica se o clique foi com o botão esquerdo
+        // Verifica se o clique foi com o botão esquerdo do mouse
         if (eventData.button == PointerEventData.InputButton.Left)
         {
-            // Lógica do clique duplo
-            if ((Time.time - lastClickTime) < DOUBLE_CLICK_TIME)
-            {
-                Debug.Log("Duplo clique em: " + itemName); // Agora vai mostrar "Pedra"
+            float clickTime = Time.time;
 
-                if (InventorySystem.Instance != null && !string.IsNullOrEmpty(itemName))
+            // Se o tempo entre o clique atual e o último clique for menor que DOUBLE_CLICK_TIME
+            if (clickTime - lastClickTime < DOUBLE_CLICK_TIME)
+            {
+                // É um clique duplo!
+                Debug.Log($"Clique duplo detectado no item: {itemName}");
+
+                // Verifica se o InventorySystem existe e se o item é equipável
+                if (InventorySystem.Instance != null && parentItemSlot != null)
                 {
-                    // Passa o nome correto para o sistema de equipar
-                    InventorySystem.Instance.HandleItemEquipRequest(itemName);
+                    // Chama o método para equipar o item
+                    InventorySystem.Instance.HandleItemEquipRequest(parentItemSlot.itemName);
+                }
+                else
+                {
+                    Debug.LogWarning("[SlotItemClickHandler] InventorySystem.Instance ou parentItemSlot é nulo. Não foi possível equipar o item.");
                 }
 
-                lastClickTime = 0;
+                // Reseta o tempo do último clique para evitar múltiplos cliques duplos
+                lastClickTime = 0f;
             }
             else
             {
-                lastClickTime = Time.time;
+                // É um clique simples, apenas registra o tempo
+                lastClickTime = clickTime;
             }
         }
     }

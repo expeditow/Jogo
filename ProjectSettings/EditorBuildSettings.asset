@@ -5,9 +5,21 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
-    path: Assets/expedito/Scenes/expeditow.unity
+  - enabled: 0
+    path: Assets/Scenes/CutsceneMeioCena.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/StartMenu/StartMenu.unity
+    guid: 84e9af22aa60d5444b8321b01534aec1
+  - enabled: 1
+    path: Assets/cenas/CutscenesInicioCena.unity
+    guid: 7451b05a30a26fc4cb66a66f01930571
+  - enabled: 1
+    path: Assets/scene_final/scene_final.unity
+    guid: 5d57a3d14a170ee4489cb35e188cd1cb
+  - enabled: 1
+    path: Assets/Scenes/CutsceneFinalCena.unity
+    guid: 59c7fa6d11a8e884faae549ecb82ca51
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
